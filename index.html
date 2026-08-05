@@ -53,23 +53,28 @@
     letter-spacing:-.01em;
   }
   .sub{color:var(--dim); font-size:13px; margin-top:4px;}
-  .refresh-block{text-align:right;}
+  .refresh-block{text-align:right; display:flex; flex-direction:column; align-items:flex-end; gap:6px;}
   button.refresh{
     background:var(--amber);
     color:#1a1206;
     border:none;
-    font-family:'JetBrains Mono', monospace;
-    font-weight:700;
-    font-size:12px;
-    letter-spacing:.05em;
-    padding:10px 16px;
-    border-radius:3px;
+    width:34px; height:34px;
+    border-radius:50%;
     cursor:pointer;
-    text-transform:uppercase;
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+    font-size:16px;
+    line-height:1;
+    padding:0;
+    flex-shrink:0;
   }
   button.refresh:hover{background:#f0bb63;}
-  button.refresh:disabled{opacity:.5; cursor:wait;}
-  .asof{font-family:'JetBrains Mono', monospace; font-size:11px; color:var(--dim); margin-top:8px;}
+  button.refresh:disabled{opacity:.6; cursor:wait;}
+  button.refresh .icon{display:inline-block;}
+  button.refresh.spinning .icon{animation:spin .8s linear infinite;}
+  button.refresh.failed{background:var(--red); color:#2a0d0a;}
+  .asof{font-family:'JetBrains Mono', monospace; font-size:11px; color:var(--dim); margin-top:2px; text-align:right; max-width:220px;}
 
   main{padding:24px 32px 60px; max-width:1180px; margin:0 auto;}
 
@@ -246,7 +251,7 @@
     <div class="sub">Six critical macro indicators, cross-correlation read, and institutional flow radar for developed + emerging market allocation calls.</div>
   </div>
   <div class="refresh-block">
-    <button class="refresh" id="refreshBtn" onclick="refreshData()">↻ Refresh live data</button>
+    <button class="refresh" id="refreshBtn" onclick="refreshData()" title="Refresh live data" aria-label="Refresh live data"><span class="icon">↻</span></button>
     <div class="asof" id="asOf">Baseline as of: 31 Jul – 2 Aug 2026 (close)</div>
   </div>
 </header>
@@ -505,43 +510,73 @@ applyDynamicThesis();
 async function refreshData(){
   const btn = document.getElementById('refreshBtn');
   const log = document.getElementById('refreshLog');
+  if(btn.classList.contains('spinning')) return; // prevent overlapping calls
+  btn.classList.remove('failed');
+  btn.classList.add('spinning');
   btn.disabled = true;
-  btn.textContent = '↻ Pulling live data…';
+  log.textContent = 'Refreshing…';
+
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 30000);
+
   try{
-    const prompt = `Give me the current values (with a one-line source/date) for: 1) US 10-year Treasury yield, 2) S&P 500 index level, 3) Nasdaq Composite index level, 4) latest US CPI YoY inflation rate, 5) gold spot price per ounce, 6) Brent crude price per barrel. Respond ONLY as JSON, no markdown, no preamble, in this exact shape: {"asOf":"...", "items":[{"label":"10Y Treasury Yield","value":"...","delta":"...","dir":"up|down","note":"..."}, ... five more in the same order as listed above]}`;
+    const prompt = `Search the web right now for the current values of these six market indicators and give me the freshest numbers you can find (with a one-line source/date each): 1) US 10-year Treasury yield, 2) S&P 500 index level, 3) Nasdaq Composite index level, 4) latest US CPI YoY inflation rate, 5) gold spot price per ounce, 6) Brent crude price per barrel. After searching, respond with ONLY a JSON object — no markdown fences, no commentary before or after — in exactly this shape: {"asOf":"<date/time you found this>", "items":[{"label":"10Y Treasury Yield","value":"...","delta":"...","dir":"up","note":"..."},{"label":"S&P 500","value":"...","delta":"...","dir":"up","note":"..."},{"label":"Nasdaq Composite","value":"...","delta":"...","dir":"up","note":"..."},{"label":"US Inflation (CPI YoY)","value":"...","delta":"...","dir":"down","note":"..."},{"label":"Gold (spot)","value":"...","delta":"...","dir":"down","note":"..."},{"label":"Brent Crude","value":"...","delta":"...","dir":"up","note":"..."}]}. "dir" must be exactly "up" or "down" reflecting whether that value has risen or fallen versus its prior reading.`;
+
     const response = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: {"Content-Type": "application/json"},
       body: JSON.stringify({
         model: "claude-sonnet-4-6",
-        max_tokens: 1000,
+        max_tokens: 1800,
         messages: [{ role: "user", content: prompt }],
         tools: [{ type: "web_search_20250305", name: "web_search" }]
-      })
+      }),
+      signal: controller.signal
     });
+
+    if(!response.ok){
+      const errText = await response.text().catch(() => '');
+      throw new Error('API returned ' + response.status + (errText ? ': ' + errText.slice(0,150) : ''));
+    }
+
     const data = await response.json();
     const textBlocks = (data.content || []).filter(b => b.type === "text").map(b => b.text).join("\n");
-    const clean = textBlocks.replace(/```json|```/g, "").trim();
-    const parsed = JSON.parse(clean);
-    if(parsed.items && parsed.items.length === 6){
-      parsed.items.forEach((it, idx) => {
-        indicators[idx].value = it.value || indicators[idx].value;
-        indicators[idx].delta = it.delta || indicators[idx].delta;
-        indicators[idx].dir = it.dir || indicators[idx].dir;
-        indicators[idx].note = it.note || indicators[idx].note;
-      });
-      render();
-      applyDynamicThesis();
-      document.getElementById('asOf').textContent = 'Live-refreshed: ' + (parsed.asOf || new Date().toLocaleString());
-      log.textContent = 'Last refresh succeeded — composite score, chips and the EM/growth-defensive callouts above were recalculated from these live values. Re-verify against a primary source before acting on any single reading.';
-    } else {
-      throw new Error("Unexpected response shape");
+    if(!textBlocks.trim()) throw new Error('Empty response from model');
+
+    // Pull out the JSON object even if the model added stray text around it
+    const firstBrace = textBlocks.indexOf('{');
+    const lastBrace = textBlocks.lastIndexOf('}');
+    if(firstBrace === -1 || lastBrace === -1 || lastBrace <= firstBrace){
+      throw new Error('No JSON object found in response');
     }
+    const jsonSlice = textBlocks.slice(firstBrace, lastBrace + 1);
+    const parsed = JSON.parse(jsonSlice);
+
+    if(!parsed.items || parsed.items.length !== 6){
+      throw new Error('Response had ' + (parsed.items ? parsed.items.length : 0) + ' items, expected 6');
+    }
+
+    parsed.items.forEach((it, idx) => {
+      if(!indicators[idx]) return;
+      indicators[idx].value = it.value || indicators[idx].value;
+      indicators[idx].delta = it.delta || indicators[idx].delta;
+      indicators[idx].dir = (it.dir === 'up' || it.dir === 'down') ? it.dir : indicators[idx].dir;
+      indicators[idx].note = it.note || indicators[idx].note;
+    });
+    render();
+    applyDynamicThesis();
+    document.getElementById('asOf').textContent = 'Live-refreshed: ' + (parsed.asOf || new Date().toLocaleString());
+    log.textContent = 'Refreshed successfully — composite score, chips and the EM/growth-defensive callouts above were recalculated from these live values. Re-verify against a primary source before acting on any single reading.';
   } catch(err){
-    log.textContent = 'Auto-refresh failed on open (' + err.message + '). Showing the last known figures — pull down or tap "Refresh live data" to retry.';
+    const reason = err.name === 'AbortError' ? 'timed out after 30s' : err.message;
+    btn.classList.add('failed');
+    document.getElementById('asOf').textContent = 'Refresh failed — showing last known figures';
+    log.textContent = 'Refresh failed (' + reason + '). Showing the last known figures — tap the ↻ button or pull down to retry.';
+    setTimeout(() => btn.classList.remove('failed'), 2500);
   } finally {
+    clearTimeout(timeoutId);
+    btn.classList.remove('spinning');
     btn.disabled = false;
-    btn.textContent = '↻ Refresh live data';
   }
 }
 
