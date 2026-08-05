@@ -287,15 +287,15 @@
         <div class="verdict" id="verdictText">Call: hold your developed-market sleeve, don't add fresh money to the emerging-market sleeve this month. The +1 score is being carried entirely by US mega-cap earnings — it is not a broad, healthy risk-on reading, and it masks a real EM-specific headwind (see below).</div>
       </div>
       <div class="signal-card" style="flex:1.4;">
-        <div class="factor-row"><span>10Y Yield trend (rising = bearish for EM/duration)</span><span class="chip bear">Bearish</span></div>
-        <div class="factor-row"><span>US CPI trend (June cooled, but oil risk reversing it)</span><span class="chip neutral">Neutral, watch</span></div>
-        <div class="factor-row"><span>Brent Crude (sharp spike = inflation + EM import-cost risk)</span><span class="chip bear">Bearish</span></div>
-        <div class="factor-row"><span>Gold (outflows = confirms risk-on rotation, DM-led)</span><span class="chip bull">Bullish for DM equities</span></div>
-        <div class="factor-row"><span>S&P 500 momentum (earnings-led, near highs)</span><span class="chip bull">Bullish</span></div>
-        <div class="factor-row"><span>Nasdaq momentum (led by hyperscaler capex + AI trade)</span><span class="chip bull">Bullish</span></div>
+        <div class="factor-row"><span>10Y Yield trend (rising = bearish for EM/duration)</span><span class="chip bear" id="chipYield">Bearish</span></div>
+        <div class="factor-row"><span>US CPI trend (June cooled, but oil risk reversing it)</span><span class="chip neutral" id="chipCPI">Neutral, watch</span></div>
+        <div class="factor-row"><span>Brent Crude (sharp spike = inflation + EM import-cost risk)</span><span class="chip bear" id="chipBrent">Bearish</span></div>
+        <div class="factor-row"><span>Gold (outflows = confirms risk-on rotation, DM-led)</span><span class="chip bull" id="chipGold">Bullish for DM equities</span></div>
+        <div class="factor-row"><span>S&P 500 momentum (earnings-led, near highs)</span><span class="chip bull" id="chipSP">Bullish</span></div>
+        <div class="factor-row"><span>Nasdaq momentum (led by hyperscaler capex + AI trade)</span><span class="chip bull" id="chipNasdaq">Bullish</span></div>
       </div>
     </div>
-    <div class="verdict" style="margin-top:1px; border-left-color:var(--red);">
+    <div class="verdict" style="margin-top:1px; border-left-color:var(--red);" id="emCallout">
       <strong>The part the composite score hides:</strong> a rising 10Y yield and a 20%+ Brent spike are the same two forces that hit oil-importing emerging markets hardest — capital outflow risk from a stronger dollar-and-yield environment, plus a direct current-account and inflation hit from pricier oil. That correlation table above (10Y↔CPI +0.77, CPI↔Brent +0.87) isn't abstract — it's the mechanism by which this month's oil shock reaches an EM-heavy fund even while the S&P and Nasdaq print near highs on unrelated AI-earnings strength. <strong>Practically:</strong> if your Global Diversified ETF lets you see its DM/EM split, this is a month to let the EM sleeve ride rather than top it up, and to recheck it once Brent stabilizes below ~$80 or the Fed's September decision removes the hike overhang — whichever comes first.
     </div>
   </section>
@@ -354,7 +354,7 @@
         <div class="factor-row"><span>BlackRock read on 2026 so far</span><span class="chip neutral">Cyclicals + defensives both beating tech — value &gt; growth</span></div>
         <div class="factor-row"><span>August 2026 street consensus</span><span class="chip neutral">J.P. Morgan, Morningstar, BlackRock all recommend a barbell, not one side</span></div>
         <div class="factor-row"><span>AI earnings momentum</span><span class="chip bull">Still intact — this isn't a "sell growth" call</span></div>
-        <div class="factor-row"><span>This week's oil/yield shock</span><span class="chip bear">Adds near-term case for energy &amp; quality defensives</span></div>
+        <div class="factor-row"><span>This week's oil/yield shock</span><span class="chip bear" id="chipGdShock">Adds near-term case for energy &amp; quality defensives</span></div>
       </div>
     </div>
     <div class="verdict" style="margin-top:1px;">
@@ -435,6 +435,73 @@ function render(){
 }
 render();
 
+// --- Deterministic thesis recalculation (no LLM guessing on the score itself) ---
+// idx map: 0 10Y Yield, 1 S&P500, 2 Nasdaq, 3 CPI, 4 Gold, 5 Brent
+function setChip(id, bull, bearLabel, bullLabel, neutralLabel, isFlat){
+  const el = document.getElementById(id);
+  if(!el) return;
+  el.className = 'chip ' + (isFlat ? 'neutral' : (bull ? 'bull' : 'bear'));
+  el.textContent = isFlat ? neutralLabel : (bull ? bullLabel : bearLabel);
+}
+
+function applyDynamicThesis(){
+  const [yieldI, spI, nasI, cpiI, goldI, brentI] = indicators;
+
+  // Each pair: does "up" help or hurt the ETF thesis?
+  const yieldBull = yieldI.dir === 'down';           // falling yield = good for EM/duration
+  const cpiBull   = cpiI.dir === 'down';              // cooling inflation = good
+  const brentBull = brentI.dir === 'down';            // falling oil = good
+  const goldBull  = goldI.dir === 'down';             // gold outflow/falling = risk-on for DM equities
+  const spBull    = spI.dir === 'up';                 // rising index = good
+  const nasBull   = nasI.dir === 'up';                // rising index = good
+
+  setChip('chipYield', yieldBull, 'Bearish', 'Bullish', 'Neutral, watch', false);
+  setChip('chipCPI',   cpiBull,  'Bearish', 'Bullish', 'Neutral, watch', false);
+  setChip('chipBrent', brentBull, 'Bearish', 'Bullish', 'Neutral, watch', false);
+  setChip('chipGold',  goldBull, 'Bearish for DM equities', 'Bullish for DM equities', 'Neutral, watch', false);
+  setChip('chipSP',    spBull,   'Bearish', 'Bullish', 'Neutral, watch', false);
+  setChip('chipNasdaq',nasBull,  'Bearish', 'Bullish', 'Neutral, watch', false);
+
+  const score = [yieldBull, cpiBull, brentBull, goldBull, spBull, nasBull]
+    .reduce((s, b) => s + (b ? 1 : -1), 0);
+
+  const scoreBig = document.getElementById('scoreBig');
+  scoreBig.textContent = (score > 0 ? '+' : '') + score;
+
+  let verdict;
+  if(score >= 3){
+    verdict = `Call: broadly risk-on across the board. All or nearly all six indicators are pointing the same way — check whether the rally is broad-based (good) or concentrated in a handful of mega-caps (fragile) before adding fresh money.`;
+  } else if(score >= 1){
+    verdict = `Call: mildly risk-on, but likely narrow. The +${score} score is being carried by specific pockets (usually mega-cap earnings), not a clean broad reading — the yield/oil/inflation side still shows real friction underneath.`;
+  } else if(score === 0){
+    verdict = `Call: genuinely mixed, no dominant force this week. Equal pressure from both sides — a month to hold and re-check rather than act on this score alone.`;
+  } else if(score >= -2){
+    verdict = `Call: mildly risk-off. Yield, inflation and/or oil pressure is outweighing equity momentum — caution on adding fresh money to the EM/duration-sensitive sleeve until this clears.`;
+  } else {
+    verdict = `Call: broadly risk-off. Multiple macro pressures are aligned against risk assets at once — this is a defensive-positioning signal, not a dip-buying one.`;
+  }
+  document.getElementById('verdictText').innerHTML = `<strong>Score ${(score>0?'+':'')+score} of 6 —</strong> ${verdict}`;
+
+  // EM callout — only show the oil/yield EM-risk framing when both are actually working against EM
+  const emCallout = document.getElementById('emCallout');
+  if(yieldI.dir === 'up' && brentI.dir === 'up'){
+    emCallout.innerHTML = `<strong>The part the composite score hides:</strong> a rising 10Y yield (${yieldI.value}) and rising Brent (${brentI.value}) are the same two forces that hit oil-importing emerging markets hardest — capital outflow risk from a stronger dollar-and-yield environment, plus a direct current-account and inflation hit from pricier oil. <strong>Practically:</strong> if your Global Diversified ETF lets you see its DM/EM split, this is a month to let the EM sleeve ride rather than top it up, and to recheck it once Brent stabilizes or the Fed's next decision removes the hike overhang — whichever comes first.`;
+  } else {
+    emCallout.innerHTML = `<strong>EM-specific pressure has eased:</strong> the 10Y yield (${yieldI.value}) and Brent (${brentI.value}) are no longer both moving against emerging markets at the same time. That doesn't make the EM sleeve of a Global Diversified ETF a "buy" on its own, but the acute dollar-and-oil squeeze flagged in earlier readings is not currently live — worth re-confirming your EM allocation against your target weights rather than avoiding it by default.`;
+  }
+
+  // Growth/defensive "this week's shock" chip — reflects whether yield+oil pressure is live right now
+  const gdShock = document.getElementById('chipGdShock');
+  if(gdShock){
+    const shockLive = yieldI.dir === 'up' && brentI.dir === 'up';
+    gdShock.className = 'chip ' + (shockLive ? 'bear' : 'neutral');
+    gdShock.textContent = shockLive
+      ? 'Adds near-term case for energy & quality defensives'
+      : 'Near-term yield/oil pressure has cooled — barbell case now rests mainly on valuation, not this shock';
+  }
+}
+applyDynamicThesis();
+
 async function refreshData(){
   const btn = document.getElementById('refreshBtn');
   const log = document.getElementById('refreshLog');
@@ -464,18 +531,23 @@ async function refreshData(){
         indicators[idx].note = it.note || indicators[idx].note;
       });
       render();
+      applyDynamicThesis();
       document.getElementById('asOf').textContent = 'Live-refreshed: ' + (parsed.asOf || new Date().toLocaleString());
-      log.textContent = 'Last refresh succeeded. Re-run weekly, or before acting on any single reading — always sanity-check against a primary source (Bloomberg, Reuters, tradingeconomics.com) before a trade decision.';
+      log.textContent = 'Last refresh succeeded — composite score, chips and the EM/growth-defensive callouts above were recalculated from these live values. Re-verify against a primary source before acting on any single reading.';
     } else {
       throw new Error("Unexpected response shape");
     }
   } catch(err){
-    log.textContent = 'Refresh failed (' + err.message + '). The baseline figures above remain from the last manual pull — try again, or check the sources listed below directly.';
+    log.textContent = 'Auto-refresh failed on open (' + err.message + '). Showing the last known figures — pull down or tap "Refresh live data" to retry.';
   } finally {
     btn.disabled = false;
     btn.textContent = '↻ Refresh live data';
   }
 }
+
+// Auto-refresh once when the artifact is opened/loaded
+window.addEventListener('load', function(){ refreshData(); });
+
 
 // --- Pull-to-refresh (swipe down at top of page) ---
 (function(){
@@ -533,4 +605,3 @@ async function refreshData(){
 
 </body>
 </html>
-
