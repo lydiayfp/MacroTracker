@@ -31,13 +31,9 @@
   .num{font-family:'JetBrains Mono', monospace;}
 
   header{
-    padding:28px 32px 20px;
+    padding:28px 70px 20px 32px;
     border-bottom:1px solid var(--line);
-    display:flex;
-    justify-content:space-between;
-    align-items:flex-end;
-    flex-wrap:wrap;
-    gap:12px;
+    position:relative;
   }
   .brand-eyebrow{
     font-family:'JetBrains Mono', monospace;
@@ -53,7 +49,16 @@
     letter-spacing:-.01em;
   }
   .sub{color:var(--dim); font-size:13px; margin-top:4px;}
-  .refresh-block{text-align:right; display:flex; flex-direction:column; align-items:flex-end; gap:6px;}
+  .refresh-block{
+    position:absolute;
+    top:20px;
+    right:20px;
+    text-align:right;
+    display:flex;
+    flex-direction:column;
+    align-items:flex-end;
+    gap:6px;
+  }
   button.refresh{
     background:var(--panel);
     border:1px solid var(--line);
@@ -75,7 +80,7 @@
   button.refresh.spinning{border-color:var(--amber);}
   button.refresh.spinning .icon{animation:spin .8s linear infinite;}
   button.refresh.failed{border-color:var(--red); color:var(--red);}
-  .asof{font-family:'JetBrains Mono', monospace; font-size:11px; color:var(--dim); margin-top:2px; text-align:right; max-width:220px;}
+  .asof{font-family:'JetBrains Mono', monospace; font-size:10.5px; color:var(--dim); margin-top:2px; text-align:right; max-width:130px; line-height:1.4;}
 
   main{padding:24px 32px 60px; max-width:1180px; margin:0 auto;}
 
@@ -521,7 +526,7 @@ async function refreshData(){
   const timeoutId = setTimeout(() => controller.abort(), 30000);
 
   try{
-    const prompt = `Search the web right now for the current values of these six market indicators and give me the freshest numbers you can find (with a one-line source/date each): 1) US 10-year Treasury yield, 2) S&P 500 index level, 3) Nasdaq Composite index level, 4) latest US CPI YoY inflation rate, 5) gold spot price per ounce, 6) Brent crude price per barrel. After searching, respond with ONLY a JSON object — no markdown fences, no commentary before or after — in exactly this shape: {"asOf":"<date/time you found this>", "items":[{"label":"10Y Treasury Yield","value":"...","delta":"...","dir":"up","note":"..."},{"label":"S&P 500","value":"...","delta":"...","dir":"up","note":"..."},{"label":"Nasdaq Composite","value":"...","delta":"...","dir":"up","note":"..."},{"label":"US Inflation (CPI YoY)","value":"...","delta":"...","dir":"down","note":"..."},{"label":"Gold (spot)","value":"...","delta":"...","dir":"down","note":"..."},{"label":"Brent Crude","value":"...","delta":"...","dir":"up","note":"..."}]}. "dir" must be exactly "up" or "down" reflecting whether that value has risen or fallen versus its prior reading.`;
+    const prompt = `Search the web right now for the current values of these six market indicators, prioritising public, reputable macro sources — Financial Times, Reuters, Trading Economics, Bloomberg, the U.S. Bureau of Labor Statistics (BLS), EIA and the World Gold Council — over aggregators or forums. Give me the freshest numbers you can find (with a one-line source/date each): 1) US 10-year Treasury yield, 2) S&P 500 index level, 3) Nasdaq Composite index level, 4) latest US CPI YoY inflation rate, 5) gold spot price per ounce, 6) Brent crude price per barrel. After searching, respond with ONLY a JSON object — no markdown fences, no commentary before or after — in exactly this shape: {"asOf":"<date/time you found this>", "items":[{"label":"10Y Treasury Yield","value":"...","delta":"...","dir":"up","note":"..."},{"label":"S&P 500","value":"...","delta":"...","dir":"up","note":"..."},{"label":"Nasdaq Composite","value":"...","delta":"...","dir":"up","note":"..."},{"label":"US Inflation (CPI YoY)","value":"...","delta":"...","dir":"down","note":"..."},{"label":"Gold (spot)","value":"...","delta":"...","dir":"down","note":"..."},{"label":"Brent Crude","value":"...","delta":"...","dir":"up","note":"..."}]}. "dir" must be exactly "up" or "down" reflecting whether that value has risen or fallen versus its prior reading.`;
 
     const response = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
